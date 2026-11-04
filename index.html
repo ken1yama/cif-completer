@@ -1,0 +1,1729 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>CIF補完ツール</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column of numbered steps, like a lab procedure sheet; CIF tags always set in mono. */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5a6773;
+  --line: #d6dde2;
+  --code: #edf1f3;
+  --accent: #285a87;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3edf6;
+  --ok: #2a7a4c;
+  --ok-soft: #e2f2e8;
+  --warn: #9a5c0e;
+  --warn-soft: #fbefdc;
+  --none: #6f7b86;
+  --none-soft: #eceff1;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", "Menlo", monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151a; --surface: #172029; --ink: #e2e8ed; --muted: #94a2ae; --line: #2a3641;
+    --code: #0c1116; --accent: #82b2dd; --accent-ink: #0d1620; --accent-soft: #1c2e40;
+    --ok: #74c493; --ok-soft: #173326; --warn: #e3a95c; --warn-soft: #3a2a14;
+    --none: #8a96a1; --none-soft: #222c35; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151a; --surface: #172029; --ink: #e2e8ed; --muted: #94a2ae; --line: #2a3641;
+  --code: #0c1116; --accent: #82b2dd; --accent-ink: #0d1620; --accent-soft: #1c2e40;
+  --ok: #74c493; --ok-soft: #173326; --warn: #e3a95c; --warn-soft: #3a2a14;
+  --none: #8a96a1; --none-soft: #222c35; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+}
+.page {
+  max-width: 780px; margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 28px;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.35; }
+h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: 0.01em; }
+h2 { font-size: 1.12rem; font-weight: 600; }
+h3 { font-size: 0.95rem; font-weight: 600; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+
+/* header */
+.masthead { display: flex; flex-direction: column; gap: 10px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.lang button { font: inherit; font-size: 0.82rem; padding: 4px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.lang button + button { border-left: 1px solid var(--line); }
+.lang button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.lang button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.lede { max-width: 62ch; }
+
+.intro {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.intro summary { cursor: pointer; font-weight: 600; }
+.intro summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.intro-body { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.intro dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.intro dt { font-weight: 600; color: var(--muted); font-size: 0.88rem; padding-top: 1px; }
+.intro dd { margin: 0; min-width: 0; }
+.intro ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+.flow {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted);
+  background: var(--code); border-radius: 4px; padding: 8px 12px; overflow-x: auto; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .intro dl { grid-template-columns: 1fr; gap: 2px; }
+  .intro dd { margin-bottom: 8px; }
+}
+
+/* steps */
+.step { display: grid; grid-template-columns: 44px 1fr; gap: 0 14px; }
+.step-num {
+  font-family: var(--font-mono); font-size: 0.9rem; font-weight: 500;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  border: 1.5px solid var(--line); color: var(--muted); background: var(--surface);
+}
+.step.done .step-num { border-color: var(--accent); color: var(--accent-ink); background: var(--accent); }
+.step-body { min-width: 0; display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+.step-head { display: flex; flex-direction: column; gap: 2px; }
+@media (max-width: 480px) {
+  .step { grid-template-columns: 1fr; gap: 8px; }
+}
+
+.drop {
+  border: 1.5px dashed var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  transition: border-color .15s, background .15s;
+}
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop-hint { color: var(--muted); font-size: 0.88rem; }
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.btn {
+  font: inherit; font-size: 0.92rem; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius); cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  text-decoration: none; line-height: 1.4;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--accent); padding-inline: 8px; }
+.btn.quiet:hover { background: var(--accent-soft); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.file-list li {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px 10px 8px 12px;
+}
+.file-name { font-family: var(--font-mono); font-size: 0.86rem; min-width: 0; overflow-wrap: anywhere; flex: 1 1 200px; }
+.file-meta { color: var(--muted); font-size: 0.82rem; }
+
+.tag {
+  font-size: 0.74rem; font-weight: 500; letter-spacing: 0.02em;
+  padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+  background: var(--none-soft); color: var(--none);
+}
+.tag.ok { background: var(--ok-soft); color: var(--ok); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.accent { background: var(--accent-soft); color: var(--accent); }
+
+/* form */
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field label { font-weight: 500; font-size: 0.9rem; }
+.field .cif-tag { font-family: var(--font-mono); font-size: 0.76rem; color: var(--muted); }
+.field-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.field-row > * { flex: 1 1 160px; min-width: 0; }
+select, input[type="text"] {
+  font: inherit; font-size: 0.92rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; width: 100%;
+}
+.preview {
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted);
+  background: var(--code); border-radius: 4px; padding: 4px 8px; overflow-wrap: anywhere;
+}
+.preview b { color: var(--ink); font-weight: 500; }
+.note { font-size: 0.82rem; color: var(--muted); }
+.note.warn { color: var(--warn); }
+@media (max-width: 560px) { .fields { grid-template-columns: 1fr; } }
+
+/* results */
+.summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.summary .tag { font-size: 0.82rem; padding: 3px 10px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: 0.78rem; color: var(--muted); background: var(--code); white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td.t { font-family: var(--font-mono); font-size: 0.8rem; white-space: nowrap; }
+td.v { font-family: var(--font-mono); font-size: 0.8rem; max-width: 280px; overflow-wrap: anywhere; }
+td.s { white-space: nowrap; }
+td.src { color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+
+.qlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.qlist button {
+  font-family: var(--font-mono); font-size: 0.78rem; cursor: pointer;
+  background: var(--warn-soft); color: var(--warn); border: 1px solid transparent;
+  border-radius: 4px; padding: 2px 8px;
+}
+.qlist button:hover { border-color: var(--warn); }
+
+.editor {
+  width: 100%; height: 460px; resize: vertical;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px;
+  white-space: pre; overflow: auto; tab-size: 4;
+}
+.confirm {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--warn-soft); color: var(--warn); border-radius: var(--radius); padding: 10px 14px;
+  font-size: 0.9rem;
+}
+.status { font-size: 0.86rem; min-height: 1.4em; color: var(--muted); }
+.status.ok { color: var(--ok); }
+.status.err { color: var(--warn); }
+
+.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.checks li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.checks li:last-child { border-bottom: none; }
+.checks label { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1 1 220px; min-width: 0; }
+.checks input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.checks li.off label { cursor: not-allowed; color: var(--muted); }
+.checks .why { font-size: 0.8rem; color: var(--muted); flex-basis: 100%; padding-left: 26px; }
+.check-inline { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; }
+.check-inline input { width: 16px; height: 16px; accent-color: var(--accent); }
+input[type="number"] {
+  font: inherit; font-size: 0.92rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; width: 100%;
+}
+input[type="number"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+footer { border-top: 1px solid var(--line); padding-top: 16px; font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header class="masthead">
+    <div class="topbar"><span class="eyebrow">Crystallographic Information File</span>
+    <div class="lang" role="group" aria-label="Language"><button type="button" data-lang="ja">日本語</button><button type="button" data-lang="en">English</button></div></div>
+    <h1 data-i="h1">CIF補完ツール</h1>
+    <p class="lede" data-i="lede">精密化後のCIFに残る <code>?</code> を、測定ソフトが出力したファイルの値で埋め、結晶の形状・色や使用ソフトウェアを書き込みます。</p>
+  </header>
+
+  <details class="intro" id="intro" open>
+    <summary data-i="introSum">はじめに：このツールでできること</summary>
+    <div class="intro-body">
+      <div class="flow" data-i="flow">解析結果CIF（SHELXL） ＋ 測定データ（.cif_od / .pcf など） → 補完済みCIF → 手直し → checkCIF ／ Word の表</div>
+      <dl>
+        <dt data-i="dt1">書き換える項目</dt>
+        <dd data-i="dd1">値が <code>?</code> の項目だけを埋めます。すでに値が入っている項目は変更しません。どの項目を何で埋めたかは処理後に一覧で確認できます。</dd>
+        <dt>Rigaku</dt>
+        <dd data-i="ddRigaku">CrysAlisPro が出力する <code>.cif_od</code>（または CrysAlisPro から書き出した <code>.cif</code>）を読み込みます。</dd>
+        <dt>Bruker</dt>
+        <dd data-i="ddBruker">XPREP が出力する <code>.pcf</code> を読み込みます。加えて、<code>.p4p</code>（結晶の色・形状・サイズ）と SADABS の <code>.abs</code>（T<sub>min</sub>/T<sub>max</sub>）からの読み取りにも試験的に対応しています。</dd>
+        <dt data-i="dt3">表の作成</dt>
+        <dd data-i="dd3">補完したCIFから、論文のSI向けの表（結晶データ、原子座標、結合長・結合角など）を Word ファイルで作成します。完成済みのCIFから表だけを作る場合も、手順1に読み込んで手順4を実行してください。</dd>
+        <dt data-i="dt4">その他</dt>
+        <dd data-i="dd4">CIF形式で書かれたファイルであれば、他社製装置の出力も読み込めます。複数のファイルを同時に指定でき、先に追加したファイルの値が優先されます。</dd>
+      </dl>
+      <ul class="small muted">
+        <li data-i="li1">ShelXle や SHELXL で精密化した場合を主に想定しています。Olex2 は測定データを自動で取り込めるため、通常は不要です。</li>
+        <li data-i="li2">処理後の内容はこの画面で直接編集できます。最終確認には必ず checkCIF を使ってください。</li>
+      </ul>
+    </div>
+  </details>
+
+  <section class="step" id="step1">
+    <div class="step-num" aria-hidden="true">1</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s1h">解析結果のCIF</h2>
+        <p class="small muted" data-i="s1p">SHELXL などの精密化プログラムが出力したCIFです。このファイルを書き換えた版が出力されます。</p>
+      </div>
+      <div class="drop" id="drop1">
+        <input type="file" id="file1" class="file-input" accept=".cif">
+        <label class="btn" for="file1" data-i="chooseFile">ファイルを選択</label>
+        <span class="drop-hint" data-i="dropHint">またはここにドラッグ＆ドロップ</span>
+      </div>
+      <ul class="file-list" id="list1"></ul>
+    </div>
+  </section>
+
+  <section class="step" id="step2">
+    <div class="step-num" aria-hidden="true">2</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s2h">測定データのファイル</h2>
+        <p class="small muted" data-i="s2p">複数指定できます。省略した場合は、手順3の入力内容だけが書き込まれます。</p>
+      </div>
+      <div class="drop" id="drop2">
+        <input type="file" id="file2" class="file-input" accept=".cif,.cif_od,.pcf,.cfx,.p4p,.abs" multiple>
+        <label class="btn" for="file2" data-i="addFiles">ファイルを追加</label>
+        <span class="drop-hint"><code>.cif_od</code> <code>.cif</code> <code>.pcf</code> <code>.p4p</code> <code>.abs</code></span>
+      </div>
+      <ul class="file-list" id="list2"></ul>
+    </div>
+  </section>
+
+  <section class="step" id="step3">
+    <div class="step-num" aria-hidden="true">3</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s3h">結晶とソフトウェアの情報</h2>
+        <p class="small muted" data-i="s3p">測定データに形状や色が含まれていれば自動で入力されます。空欄の項目は <code>?</code> のまま残ります。</p>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="desc" data-i="lblDesc">結晶の形状</label>
+          <span class="cif-tag">_exptl_crystal_description</span>
+          <select id="desc">
+            <option value="" data-i="optNone">（指定しない）</option>
+            <option>block</option>
+            <option>plate</option>
+            <option>prism</option>
+            <option>needle</option>
+            <option>rod</option>
+            <option>irregular</option>
+            <option value="__other" data-i="optOther">その他（手入力）</option>
+          </select>
+          <input type="text" id="descOther" placeholder="例: thin plate" data-ip="phDesc" hidden>
+        </div>
+        <div class="field">
+          <label for="colour" data-i="lblColour">結晶の色</label>
+          <span class="cif-tag">_exptl_crystal_colour</span>
+          <input type="text" id="colour" placeholder="例: dark red" data-ip="phColour">
+        </div>
+
+        <div class="field wide">
+          <label for="gfx" data-i="lblGfx">分子グラフィックス</label>
+          <span class="cif-tag">_computing_molecular_graphics</span>
+          <div class="field-row">
+            <select id="gfx"></select>
+            <input type="text" id="gfxVer" placeholder="バージョン（例: 1.5）">
+          </div>
+          <input type="text" id="gfxOther" placeholder="ソフトウェア名と引用（例: Avogadro 1.2 (Hanwell et al., 2012)）" data-ip="phGfxOther" hidden>
+          <div class="preview" id="gfxPreview"></div>
+        </div>
+
+        <div class="field wide">
+          <label for="pub" data-i="lblPub">出版用資料の作成</label>
+          <span class="cif-tag">_computing_publication_material</span>
+          <div class="field-row">
+            <select id="pub"></select>
+            <input type="text" id="pubVer" placeholder="バージョン">
+          </div>
+          <input type="text" id="pubOther" placeholder="ソフトウェア名と引用" data-ip="phPubOther" hidden>
+          <div class="preview" id="pubPreview"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="step4">
+    <div class="step-num" aria-hidden="true">4</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s4h">補完を実行</h2>
+        <p class="small muted" data-i="s4p">解析結果のCIFを読み込むと実行できます。元のファイルは変更されません。</p>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="runBtn" type="button" disabled data-i="runBtn">CIFを補完する</button>
+        <span class="note" id="runNote">手順1のファイルが必要です。</span>
+      </div>
+      <div class="confirm" id="confirmBar" hidden>
+        <span data-i="confirmMsg">手作業で編集した内容は失われます。再実行しますか？</span>
+        <button class="btn" id="confirmYes" type="button" data-i="confirmYes">破棄して再実行</button>
+        <button class="btn quiet" id="confirmNo" type="button" data-i="confirmNo">キャンセル</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="step5" hidden>
+    <div class="step-num" aria-hidden="true">5</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s5h">結果の確認と手直し</h2>
+        <p class="small muted" data-i="s5p">下の一覧で書き込まれた値を確認し、必要ならエディタで直接修正してください。</p>
+      </div>
+
+      <div class="summary" id="summary"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th data-i="thItem">項目</th><th data-i="thValue">値</th><th data-i="thStatus">状態</th><th data-i="thSource">出典</th></tr></thead>
+          <tbody id="reportBody"></tbody>
+        </table>
+      </div>
+
+      <div class="step-head">
+        <h3 data-i="qh">まだ <code>?</code> の項目</h3>
+        <p class="small muted" data-i="qp">クリックするとエディタの該当箇所に移動します。checkCIF の警告対象になるものがないか確認してください。</p>
+      </div>
+      <div class="qlist" id="qlist"></div>
+
+      <div class="step-head">
+        <h3><span data-i="editorH">CIFエディタ</span> <span class="tag accent" id="editedTag" data-i="edited" hidden>編集済み</span></h3>
+      </div>
+      <textarea class="editor" id="editor" spellcheck="false" wrap="off" aria-label="補完後のCIF" data-ia="ariaEditor"></textarea>
+
+      <div class="btn-row">
+        <button class="btn primary" id="dlBtn" type="button" data-i="dlBtn">CIFをダウンロード</button>
+        <button class="btn" id="copyBtn" type="button" data-i="copyBtn">全文をコピー</button>
+        <a class="btn" href="https://checkcif.iucr.org/" target="_blank" rel="noopener" data-i="checkcif">checkCIF を開く ↗</a>
+        <button class="btn quiet" id="resetBtn" type="button" data-i="resetBtn">補完直後に戻す</button>
+      </div>
+      <p class="note" id="viewerNote" hidden data-i="viewerNote">Claude 上で開いているため、.cif のままでは保存できません。<code>_edit.cif.txt</code> として保存されるので、末尾の <code>.txt</code> を削除してください。ダウンロードしたHTMLファイルをブラウザで開いた場合は <code>.cif</code> で保存されます。</p>
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="step" id="step6" hidden>
+    <div class="step-num" aria-hidden="true">6</div>
+    <div class="step-body">
+      <div class="step-head">
+        <h2 data-i="s6h">表の作成（Word）</h2>
+        <p class="small muted" data-i="s6p">結晶データ・原子座標・結合長/角などの表を .docx で作成します。上のエディタの現在の内容から作るので、手直しした内容も反映されます。フォントは Times New Roman です。</p>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="compound" data-i="lblCompound">化合物名（表題に使用）</label>
+          <input type="text" id="compound" placeholder="データブロック名" data-ip="phCompound">
+        </div>
+        <div class="field">
+          <label for="tableStart" data-i="lblStart">最初の表番号</label>
+          <input type="number" id="tableStart" min="1" value="1">
+        </div>
+        <div class="field wide">
+          <label class="check-inline"><input type="checkbox" id="brackets" checked> <span data-i="brk">原子名を括弧付きにする（C1 → C(1)）</span></label>
+        </div>
+      </div>
+      <ul class="checks" id="tableChecks"></ul>
+      <div class="btn-row">
+        <button class="btn primary" id="docxBtn" type="button" data-i="docxBtn">Word ファイルを作成</button>
+        <span class="note" id="docxNote"></span>
+      </div>
+      <p class="status" id="docxStatus" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <footer>
+    <span data-i="foot1">CIF補完ツール v2.2 ・ 値が <code>?</code> の単一値項目のみを書き換えます（loop 内の値は対象外）。</span>
+    <span data-i="foot2">ファイルはブラウザ内でのみ処理されます。</span>
+    <span>© 2026 Ken-ichi Yamashita ・ MIT License</span>
+  </footer>
+</div>
+
+<script>
+// CORE START
+const CIF = (() => {
+  const KEYWORD = /^(loop_|data_|save_|global_|stop_)/i;
+
+  function tokenize(t) {
+    const toks = []; const n = t.length; let i = 0;
+    const ws = ch => ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
+    while (i < n) {
+      const c = t[i];
+      if (ws(c)) { i++; continue; }
+      if (c === '#') { while (i < n && t[i] !== '\n') i++; continue; }
+      const lineStart = i === 0 || t[i - 1] === '\n';
+      if (c === ';' && lineStart) {
+        const j = t.indexOf('\n;', i + 1);
+        const end = j < 0 ? n : j + 2;
+        toks.push({ kind: 'text', start: i, end }); i = end; continue;
+      }
+      if (c === "'" || c === '"') {
+        let j = i + 1; let closed = false;
+        while (j < n && t[j] !== '\n') {
+          if (t[j] === c && (j + 1 >= n || ws(t[j + 1]))) { closed = true; break; }
+          j++;
+        }
+        const end = closed ? j + 1 : j;
+        toks.push({ kind: 'quoted', start: i, end }); i = end; continue;
+      }
+      let j = i; while (j < n && !ws(t[j])) j++;
+      toks.push({ kind: 'bare', start: i, end: j }); i = j;
+    }
+    return toks;
+  }
+
+  function plainOf(t, tok) {
+    const raw = t.slice(tok.start, tok.end);
+    if (tok.kind === 'text') return raw.replace(/^;/, '').replace(/\n;$/, '').replace(/^\n/, '').trim();
+    if (tok.kind === 'quoted') return raw.length >= 2 && raw[raw.length - 1] === raw[0] ? raw.slice(1, -1) : raw.slice(1);
+    return raw;
+  }
+
+  // Single-valued items only (loop values are skipped). Keys are lower-case tags; first occurrence wins.
+  function parseItems(t) {
+    const toks = tokenize(t); const items = new Map();
+    const raw = tok => t.slice(tok.start, tok.end);
+    const isTagOrKw = tok => tok.kind === 'bare' && (raw(tok)[0] === '_' || KEYWORD.test(raw(tok)));
+    let k = 0;
+    while (k < toks.length) {
+      const tk = toks[k]; const s = raw(tk);
+      if (tk.kind === 'bare' && /^loop_$/i.test(s)) {
+        k++;
+        while (k < toks.length && toks[k].kind === 'bare' && raw(toks[k])[0] === '_') k++;
+        while (k < toks.length && !isTagOrKw(toks[k])) k++;
+        continue;
+      }
+      if (tk.kind === 'bare' && s[0] === '_') {
+        const v = toks[k + 1];
+        if (v && !isTagOrKw(v)) {
+          const key = s.toLowerCase();
+          if (!items.has(key)) {
+            items.set(key, { tag: s, tagEnd: tk.end, valueStart: v.start, valueEnd: v.end,
+              kind: v.kind, raw: raw(v), value: plainOf(t, v) });
+          }
+          k += 2; continue;
+        }
+      }
+      k++;
+    }
+    return items;
+  }
+
+  // All loops: [{tags:[lower-case], rows:[[plain values]]}]
+  function parseLoops(t) {
+    const toks = tokenize(t); const loops = [];
+    const raw = tok => t.slice(tok.start, tok.end);
+    const isTagOrKw = tok => tok.kind === 'bare' && (raw(tok)[0] === '_' || KEYWORD.test(raw(tok)));
+    let k = 0;
+    while (k < toks.length) {
+      if (toks[k].kind === 'bare' && /^loop_$/i.test(raw(toks[k]))) {
+        k++;
+        const tags = [];
+        while (k < toks.length && toks[k].kind === 'bare' && raw(toks[k])[0] === '_') { tags.push(raw(toks[k]).toLowerCase()); k++; }
+        const vals = [];
+        while (k < toks.length && !isTagOrKw(toks[k])) { vals.push(plainOf(t, toks[k])); k++; }
+        const rows = [];
+        if (tags.length) for (let i = 0; i + tags.length <= vals.length; i += tags.length) rows.push(vals.slice(i, i + tags.length));
+        loops.push({ tags, rows });
+        continue;
+      }
+      k++;
+    }
+    return loops;
+  }
+
+  // Format a plain string as a CIF value. force=true always quotes single-line values.
+  function quote(v, force) {
+    v = String(v).trim();
+    if (v.includes('\n')) return { raw: ';\n' + v + '\n;', kind: 'text' };
+    const needs = force || v === '' || /\s/.test(v) || /^[_#$'"\[\];]/.test(v) || v === '?' || v === '.' || KEYWORD.test(v);
+    if (!needs) return { raw: v, kind: 'bare' };
+    if (!/'(\s|$)/.test(v)) return { raw: "'" + v + "'", kind: 'quoted' };
+    if (!/"(\s|$)/.test(v)) return { raw: '"' + v + '"', kind: 'quoted' };
+    return { raw: ';\n' + v + '\n;', kind: 'text' };
+  }
+
+  function isEmptyValue(item) {
+    return !item || item.kind === 'bare' && (item.raw === '?' || item.raw === '.');
+  }
+
+  // Bruker .p4p: plain keyword lines (experimental).
+  function parseP4P(t) {
+    const items = new Map();
+    const put = (tag, value, force) => { if (value) items.set(tag, { ...quote(value, force), value }); };
+    const col = t.match(/^CCOLOR\s+(.+?)\s*$/m);
+    if (col) put('_exptl_crystal_colour', col[1], true);
+    const mor = t.match(/^MORPH\s+(.+?)\s*$/m);
+    if (mor) put('_exptl_crystal_description', mor[1], false);
+    const siz = t.match(/^CSIZE\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/m);
+    if (siz) {
+      const s = [siz[1], siz[2], siz[3]].map(Number).filter(x => x > 0).sort((a, b) => b - a);
+      if (s.length === 3) {
+        put('_exptl_crystal_size_max', String(s[0])); put('_exptl_crystal_size_mid', String(s[1])); put('_exptl_crystal_size_min', String(s[2]));
+      }
+    }
+    return items;
+  }
+
+  // SADABS .abs listing (experimental).
+  function parseABS(t) {
+    const items = new Map();
+    const tm = t.match(/minimum and maximum (?:apparent )?transmission[^0-9\n]*([0-9]*\.[0-9]+)\s+([0-9]*\.[0-9]+)/i);
+    if (tm) {
+      items.set('_exptl_absorpt_correction_t_min', { raw: tm[1], kind: 'bare', value: tm[1] });
+      items.set('_exptl_absorpt_correction_t_max', { raw: tm[2], kind: 'bare', value: tm[2] });
+    }
+    const ver = t.match(/\bSADABS[- ]?(\d{4}\/\d+)/i);
+    if (ver) {
+      items.set('_exptl_absorpt_correction_type', { raw: 'multi-scan', kind: 'bare', value: 'multi-scan' });
+      const txt = 'SADABS-' + ver[1] + ' (Krause, Herbst-Irmer, Sheldrick & Stalke, 2015)';
+      items.set('_exptl_absorpt_process_details', { raw: ';\n' + txt + '\n;', kind: 'text', value: txt });
+    }
+    return items;
+  }
+
+  const COPY_FIELDS = [
+    '_cell_measurement_reflns_used', '_cell_measurement_theta_min', '_cell_measurement_theta_max',
+    '_exptl_crystal_size_max', '_exptl_crystal_size_mid', '_exptl_crystal_size_min',
+    '_exptl_absorpt_correction_type', '_exptl_absorpt_correction_T_min', '_exptl_absorpt_correction_T_max',
+    '_exptl_absorpt_process_details',
+    '_diffrn_source', '_diffrn_radiation_monochromator', '_diffrn_measurement_device_type',
+    '_diffrn_measurement_method', '_diffrn_detector_area_resol_mean',
+    '_computing_data_collection', '_computing_cell_refinement', '_computing_data_reduction'
+  ];
+
+  /**
+   * target: CIF text (\n line endings). sources: [{name, items: Map}] in priority order.
+   * user: [{tag, value, force}] values typed by the person ('' = leave as is).
+   * Returns {text, report:[{tag, status, value, source}]}.
+   * status: filled | kept | missing | absent
+   */
+  function complete(target, sources, user) {
+    const items = parseItems(target);
+    const edits = []; const report = [];
+    const addEdit = (it, val) => {
+      const sep = target.slice(it.tagEnd, it.valueStart);
+      const lead = val.kind === 'text' ? '\n' : (sep.length ? sep : ' ');
+      edits.push({ start: it.tagEnd, end: it.valueEnd, text: lead + val.raw });
+    };
+    const handle = (tag, val, srcName) => {
+      const it = items.get(tag.toLowerCase());
+      if (!it) { report.push({ tag, status: 'absent', value: val ? val.value : '', source: val ? srcName : '' }); return; }
+      if (!isEmptyValue(it)) { report.push({ tag: it.tag, status: 'kept', value: it.value, source: '@existing' }); return; }
+      if (!val) { report.push({ tag: it.tag, status: 'missing', value: '', source: '' }); return; }
+      addEdit(it, val);
+      report.push({ tag: it.tag, status: 'filled', value: val.value, source: srcName });
+    };
+    for (const tag of COPY_FIELDS) {
+      let found = null, srcName = '';
+      for (const s of sources) {
+        const v = s.items.get(tag.toLowerCase());
+        if (v && !isEmptyValue(v) && String(v.value).trim() !== '') { found = v; srcName = s.name; break; }
+      }
+      handle(tag, found, srcName);
+    }
+    for (const u of user) {
+      const val = u.value && u.value.trim() ? { ...quote(u.value, u.force), value: u.value.trim() } : null;
+      handle(u.tag, val, '@input');
+    }
+    edits.sort((a, b) => b.start - a.start);
+    let out = target;
+    for (const e of edits) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+    return { text: out, report };
+  }
+
+  function questionMarks(t) {
+    const out = [];
+    for (const it of parseItems(t).values()) if (it.kind === 'bare' && it.raw === '?') out.push(it);
+    return out.sort((a, b) => a.valueStart - b.valueStart);
+  }
+
+  return { tokenize, parseItems, parseLoops, parseP4P, parseABS, quote, complete, questionMarks, COPY_FIELDS };
+})();
+
+// ---------- Word report (CIFTAB-style tables) ----------
+const REPORT = (() => {
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const T = (s, f) => Object.assign({ s: String(s) }, f || {});
+  const I = (s, f) => T(s, Object.assign({ i: true }, f || {}));
+  const SUP = (s, f) => T(s, Object.assign({ sup: true }, f || {}));
+  const SUB = (s, f) => T(s, Object.assign({ sub: true }, f || {}));
+
+  const TABLES = [
+    { id: 'crystal', label: '結晶データと精密化条件' },
+    { id: 'atoms', label: '原子座標と等価等方性変位パラメータ' },
+    { id: 'bondsSel', label: '主な結合長と結合角（Selected）' },
+    { id: 'bonds', label: '結合長と結合角（全数）' },
+    { id: 'aniso', label: '異方性変位パラメータ' },
+    { id: 'hatoms', label: '水素原子座標' },
+    { id: 'torsSel', label: '主なねじれ角（Selected）' },
+    { id: 'tors', label: 'ねじれ角（全数）' },
+    { id: 'hbond', label: '水素結合' }
+  ];
+
+  // ----- CIF access -----
+  function load(text) {
+    const items = CIF.parseItems(text); const loops = CIF.parseLoops(text);
+    const m = text.match(/^\s*data_(\S+)/mi);
+    const empty = v => v == null || v === '?' || v === '.' || v === '';
+    const g = (...tags) => {
+      for (const t of tags) {
+        const it = items.get(t.toLowerCase());
+        if (it && !(it.kind === 'bare' && (it.raw === '?' || it.raw === '.'))) return it.value;
+      }
+      return null;
+    };
+    const loop = tag => {
+      const L = loops.find(l => l.tags.includes(tag.toLowerCase()));
+      if (!L) return [];
+      return L.rows.map(r => { const o = {}; L.tags.forEach((t, i) => { o[t] = r[i]; }); return o; });
+    };
+    const atoms = loop('_atom_site_label').filter(a => a['_atom_site_fract_x'] != null);
+    const typeOf = {};
+    for (const a of atoms) typeOf[a['_atom_site_label']] = a['_atom_site_type_symbol'] || '';
+    const isH = a => {
+      const t = (a['_atom_site_type_symbol'] || '').trim();
+      if (t) return /^(H|D)$/i.test(t);
+      return /^(H|D)(?![a-z])/.test(a['_atom_site_label']);
+    };
+    const yes = v => /^y(es)?$/i.test(String(v || '').trim());
+    const bonds = loop('_geom_bond_atom_site_label_1');
+    const angles = loop('_geom_angle_atom_site_label_1');
+    const tors = loop('_geom_torsion_atom_site_label_1');
+    const hb = loop('_geom_hbond_atom_site_label_d');
+    let ops = loop('_space_group_symop_operation_xyz').map(r => r['_space_group_symop_operation_xyz']);
+    if (!ops.length) ops = loop('_symmetry_equiv_pos_as_xyz').map(r => r['_symmetry_equiv_pos_as_xyz']);
+    return {
+      name: m ? m[1] : '', g, empty, typeOf, ops,
+      heavy: atoms.filter(a => !isH(a)), hyd: atoms.filter(isH),
+      aniso: loop('_atom_site_aniso_label').filter(a => a['_atom_site_aniso_u_11'] != null),
+      bonds, angles, tors, hb,
+      bondsSel: bonds.filter(b => yes(b['_geom_bond_publ_flag'])),
+      anglesSel: angles.filter(b => yes(b['_geom_angle_publ_flag'])),
+      torsSel: tors.filter(b => yes(b['_geom_torsion_publ_flag']))
+    };
+  }
+
+  function analyze(text) {
+    const d = load(text);
+    const has = !!(d.g('_cell_length_a') || d.g('_chemical_formula_sum'));
+    const info = {
+      crystal: { n: has ? 1 : 0, unit: '', why: 'crystal' },
+      atoms: { n: d.heavy.length, unit: 'atoms', why: 'atoms' },
+      bondsSel: { n: d.bondsSel.length + d.anglesSel.length, unit: 'rows', why: 'bondsSel' },
+      bonds: { n: d.bonds.length + d.angles.length, unit: 'rows', why: 'bonds' },
+      aniso: { n: d.aniso.length, unit: 'atoms', why: 'aniso' },
+      hatoms: { n: d.hyd.length, unit: 'atoms', why: 'hatoms' },
+      torsSel: { n: d.torsSel.length, unit: 'rows', why: 'torsSel' },
+      tors: { n: d.tors.length, unit: 'rows', why: 'tors' },
+      hbond: { n: d.hb.length, unit: 'rows', why: 'hbond' }
+    };
+    return { name: d.name, info };
+  }
+
+  // ----- number & label formatting -----
+  // Multiply a CIF number (with optional esd) by 10^p and round to an integer, using exact
+  // exact decimal arithmetic with round-half-to-even on .5 ties.
+  function roundHalfEven(num, den) { // num, den: non-negative integers
+    const q = Math.floor(num / den), r = num - q * den;
+    if (2 * r > den) return q + 1;
+    if (2 * r < den) return q;
+    return q % 2 ? q + 1 : q;
+  }
+  function scaled(s, p) {
+    const m = String(s).trim().match(/^([-+]?)(\d*)(?:\.(\d*))?(?:\((\d+)\))?$/);
+    if (!m || (m[2] === '' && !m[3])) return String(s);
+    const ip = m[2] || '0', fp = m[3] || '';
+    let mag;
+    if (fp.length <= p) mag = Number(ip + fp.padEnd(p, '0'));
+    else mag = roundHalfEven(Number(ip + fp), Math.pow(10, fp.length - p));
+    let out = (m[1] === '-' && mag !== 0 ? '-' : '') + String(mag);
+    if (m[4]) {
+      const e = parseInt(m[4], 10); const shift = p - fp.length;
+      const es = shift >= 0 ? e * Math.pow(10, shift) : roundHalfEven(e, Math.pow(10, -shift));
+      out += '(' + Math.max(1, es) + ')';
+    }
+    return out;
+  }
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+  function makeLabeler(d, brackets) {
+    return label => {
+      if (!brackets || !label) return label;
+      const type = (d.typeOf[label] || '').replace(/[^A-Za-z]/g, '');
+      if (type && label.toLowerCase().startsWith(type.toLowerCase()) && label.length > type.length) {
+        return label.slice(0, type.length) + '(' + label.slice(type.length) + ')';
+      }
+      const m = label.match(/^([A-Za-z]+?)(\d.*)$/);
+      return m ? m[1] + '(' + m[2] + ')' : label;
+    };
+  }
+
+  function parseOp(op) {
+    return String(op).replace(/['"\s]/g, '').toLowerCase().split(',').map(comp => {
+      const r = { x: 0, y: 0, z: 0, c: 0 };
+      for (const term of comp.match(/[+-]?[^+-]+/g) || []) {
+        const sign = term[0] === '-' ? -1 : 1;
+        const body = term.replace(/^[+-]/, '');
+        const vm = body.match(/^(\d*\.?\d*)\*?([xyz])$/);
+        if (vm) { r[vm[2]] += sign * (vm[1] ? parseFloat(vm[1]) : 1); continue; }
+        const fm = body.match(/^(\d+)\/(\d+)$/);
+        if (fm) { r.c += sign * (+fm[1] / +fm[2]); continue; }
+        if (/^\d*\.?\d+$/.test(body)) r.c += sign * parseFloat(body);
+      }
+      return r;
+    });
+  }
+  function frac(c) {
+    if (Math.abs(c) < 1e-6) return '';
+    const sign = c < 0 ? '-' : '+'; const a = Math.abs(c);
+    for (const den of [1, 2, 3, 4, 6, 8, 12]) {
+      const n = Math.round(a * den);
+      if (Math.abs(n / den - a) < 1e-4) return sign + (den === 1 ? String(n) : n + '/' + den);
+    }
+    return sign + a.toFixed(4);
+  }
+  function formatOp(op, tr) {
+    const comps = parseOp(op);
+    if (comps.length !== 3) return op;
+    return comps.map((r, i) => {
+      let s = '';
+      for (const v of ['x', 'y', 'z']) {
+        const k = r[v]; if (!k) continue;
+        const mag = Math.abs(k) === 1 ? '' : String(Math.abs(k));
+        s += (k < 0 ? '-' : (s ? '+' : '')) + mag + v;
+      }
+      let f = frac(r.c + tr[i]);
+      if (!s) return f ? f.replace(/^\+/, '') : '0';
+      return s + f;
+    }).join(',');
+  }
+  function symTracker(ops) {
+    const map = new Map(); const list = [];
+    return {
+      list,
+      mark(code) {
+        code = String(code || '').trim();
+        if (!code || code === '.' || code === '?') return '';
+        const m = code.match(/^(\d+)(?:_(\d)(\d)(\d))?$/);
+        if (!m) return '';
+        const n = +m[1]; const tr = m[2] ? [+m[2] - 5, +m[3] - 5, +m[4] - 5] : [0, 0, 0];
+        if (n === 1 && tr.every(x => x === 0)) return '';
+        const key = n + ':' + tr.join(',');
+        if (!map.has(key)) {
+          map.set(key, list.length + 1);
+          list.push(ops[n - 1] ? formatOp(ops[n - 1], tr) : 'symmetry code ' + code);
+        }
+        return '#' + map.get(key);
+      }
+    };
+  }
+
+  function formulaSegs(f) {
+    const segs = [];
+    String(f).trim().split(/\s+/).forEach((tok, i) => {
+      const m = tok.match(/^([A-Z][a-z]?)(\d*\.?\d*)$/);
+      if (m) { segs.push(T(m[1])); if (m[2] && m[2] !== '1') segs.push(SUB(m[2])); }
+      else segs.push(T((i ? ' ' : '') + tok));
+    });
+    return segs;
+  }
+  function spaceGroupSegs(sg) {
+    const segs = [];
+    const s = String(sg).trim().replace(/\s+/g, ' ');
+    for (const tok of s.split(' ')) {
+      let i = 0;
+      while (i < tok.length) {
+        const c = tok[i];
+        if (c === '-' && /\d/.test(tok[i + 1] || '')) { segs.push(T(tok[i + 1] + '̅')); i += 2; continue; }
+        if (/\d/.test(c)) {
+          if (/\d/.test(tok[i + 1] || '') && +tok[i + 1] < +c) { segs.push(T(c)); segs.push(SUB(tok[i + 1])); i += 2; continue; }
+          segs.push(T(c)); i++; continue;
+        }
+        if (/[A-Za-z]/.test(c)) { segs.push(I(c)); i++; continue; }
+        segs.push(T(c)); i++;
+      }
+    }
+    return segs;
+  }
+  const ABS_TYPES = {
+    'multi-scan': 'Semi-empirical from equivalents', 'empirical': 'Empirical', 'numerical': 'Numerical',
+    'analytical': 'Analytical', 'gaussian': 'Gaussian', 'integration': 'Integration', 'psi-scan': 'Psi-scan',
+    'refdelf': 'Refdelf', 'sphere': 'Sphere', 'cylinder': 'Cylinder', 'none': 'None'
+  };
+  const MATRIX = { full: 'Full-matrix', fullcycle: 'Full-matrix', blocked: 'Blocked-matrix', diagonal: 'Diagonal-matrix', sparse: 'Sparse-matrix' };
+
+  // ----- WordprocessingML -----
+  const PAGE_W = 11906, PAGE_H = 16838, MARGIN = 1440;
+  function run(seg) {
+    let pr = '';
+    if (seg.b) pr += '<w:b/>';
+    if (seg.i) pr += '<w:i/>';
+    if (seg.sup) pr += '<w:vertAlign w:val="superscript"/>';
+    if (seg.sub) pr += '<w:vertAlign w:val="subscript"/>';
+    return '<w:r>' + (pr ? '<w:rPr>' + pr + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + esc(seg.s) + '</w:t></w:r>';
+  }
+  const asSegs = v => Array.isArray(v) ? v : (v == null || v === '' ? [] : [T(v)]);
+  function para(segs, o) {
+    o = o || {};
+    let pPr = '';
+    if (o.pageBreak) pPr += '<w:pageBreakBefore/>';
+    if (o.keepNext) pPr += '<w:keepNext/>';
+    if (o.tabs) pPr += '<w:tabs>' + o.tabs + '</w:tabs>';
+    pPr += '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after || 0) + '" w:line="' + (o.line || 240) + '" w:lineRule="auto"/>';
+    if (o.indRight) pPr += '<w:ind w:right="' + o.indRight + '"/>';
+    if (o.jc) pPr += '<w:jc w:val="' + o.jc + '"/>';
+    return '<w:p><w:pPr>' + pPr + '</w:pPr>' + asSegs(segs).map(run).join('') + '</w:p>';
+  }
+  function border(side, sz) { return '<w:' + side + ' w:val="single" w:sz="' + sz + '" w:space="0" w:color="000000"/>'; }
+
+  // cols: [{w, align:'left'|'center'|'dec'}]; rows: [{cells:[segs|{segs,span}], header?, top?, bottom?}]
+  function table(cols, rows) {
+    const total = cols.reduce((a, c) => a + c.w, 0);
+    let x = '<w:tbl><w:tblPr><w:tblW w:w="' + total + '" w:type="dxa"/><w:tblLayout w:type="fixed"/>' +
+      '<w:tblCellMar><w:left w:w="72" w:type="dxa"/><w:right w:w="72" w:type="dxa"/></w:tblCellMar>' +
+      '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/></w:tblPr><w:tblGrid>';
+    for (const c of cols) x += '<w:gridCol w:w="' + c.w + '"/>';
+    x += '</w:tblGrid>';
+    rows.forEach((r, ri) => {
+      const top = ri === 0 || r.top; const bottom = ri === rows.length - 1 || r.bottom;
+      x += '<w:tr><w:trPr><w:cantSplit/>' + (r.header ? '<w:tblHeader/>' : '') + '</w:trPr>';
+      let ci = 0;
+      for (const cell of r.cells) {
+        const c = Array.isArray(cell) || cell == null || typeof cell === 'string' ? { segs: asSegs(cell) } : cell;
+        const span = c.span || 1;
+        let w = 0; for (let k = 0; k < span; k++) w += cols[ci + k].w;
+        const align = c.align || (r.header ? (ci === 0 ? 'left' : 'center') : cols[ci].align || 'left');
+        let tcPr = '<w:tcW w:w="' + w + '" w:type="dxa"/>' + (span > 1 ? '<w:gridSpan w:val="' + span + '"/>' : '');
+        if (top || bottom) tcPr += '<w:tcBorders>' + (top ? border('top', ri === 0 ? 12 : 6) : '') + (bottom ? border('bottom', ri === rows.length - 1 ? 12 : 6) : '') + '</w:tcBorders>';
+        let segs = c.segs;
+        const o = { line: 264, before: ri === 0 ? 40 : 0, after: bottom ? 40 : 0 };
+        // Word aligns cell text on a decimal tab stop without a tab character.
+        if (align === 'dec') o.tabs = '<w:tab w:val="decimal" w:pos="' + Math.round(w * 0.4) + '"/>';
+        else if (align === 'num') { o.jc = 'right'; o.indRight = Math.round(w * 0.2); }
+        else if (align === 'center') o.jc = 'center';
+        x += '<w:tc><w:tcPr>' + tcPr + '</w:tcPr>' + para(segs, o) + '</w:tc>';
+        ci += span;
+      }
+      x += '</w:tr>';
+    });
+    return x + '</w:tbl>';
+  }
+
+  // ----- the tables -----
+  function buildBody(text, opts) {
+    const d = load(text);
+    const comp = (opts.compound || d.name || 'this compound').trim();
+    const L = makeLabeler(d, opts.brackets !== false);
+    const parts = [];
+    let no = Math.max(1, parseInt(opts.start, 10) || 1);
+    const val = v => v == null ? '?' : v;
+    const caption = segs => {
+      parts.push(para([T('Table ' + no + '.  ')].concat(segs), { pageBreak: parts.length > 0, keepNext: true, after: 160, line: 276 }));
+      no++;
+    };
+    const symNote = sym => {
+      if (!sym.list.length) return;
+      parts.push(para([T('Symmetry transformations used to generate equivalent atoms:')], { before: 120, line: 276 }));
+      parts.push(para([T(sym.list.map((op, i) => '#' + (i + 1) + '  ' + op).join('     '))], { line: 276 }));
+    };
+    const want = id => opts.tables.includes(id);
+    const A = 'Å';
+
+    if (want('crystal')) {
+      caption([T('Crystal data and structure refinement for ' + comp + '.')]);
+      const rows = [];
+      const add = (label, value) => rows.push({ cells: [asSegs(label), { segs: asSegs(value), span: 2 }] });
+      add('Identification code', d.name || '?');
+      const f = d.g('_chemical_formula_sum'); add('Empirical formula', f ? formulaSegs(f) : '?');
+      add('Formula weight', val(d.g('_chemical_formula_weight')));
+      add('Temperature', val(d.g('_diffrn_ambient_temperature', '_cell_measurement_temperature')) + ' K');
+      add('Wavelength', val(d.g('_diffrn_radiation_wavelength')) + ' ' + A);
+      add('Crystal system', cap(val(d.g('_space_group_crystal_system', '_symmetry_cell_setting'))));
+      const sg = d.g('_space_group_name_h-m_alt', '_symmetry_space_group_name_h-m');
+      add('Space group', sg ? spaceGroupSegs(sg) : '?');
+      [['a', 'α', 'alpha'], ['b', 'β', 'beta'], ['c', 'γ', 'gamma']].forEach(([ax, gr, nm], i) => {
+        rows.push({ cells: [i === 0 ? 'Unit cell dimensions' : '',
+          [I(ax), T(' = ' + val(d.g('_cell_length_' + ax)) + ' ' + A)],
+          [T(gr + ' = ' + val(d.g('_cell_angle_' + nm)) + '°')]] });
+      });
+      add('Volume', [T(val(d.g('_cell_volume')) + ' ' + A), SUP('3')]);
+      add('Z', val(d.g('_cell_formula_units_z')));
+      add('Density (calculated)', [T(val(d.g('_exptl_crystal_density_diffrn')) + ' Mg/m'), SUP('3')]);
+      add('Absorption coefficient', [T(val(d.g('_exptl_absorpt_coefficient_mu')) + ' mm'), SUP('−1')]);
+      add([I('F'), T('(000)')], val(d.g('_exptl_crystal_f_000')));
+      add('Crystal size', [T(val(d.g('_exptl_crystal_size_max')) + ' × ' + val(d.g('_exptl_crystal_size_mid')) + ' × ' + val(d.g('_exptl_crystal_size_min')) + ' mm'), SUP('3')]);
+      add('θ range for data collection', val(d.g('_diffrn_reflns_theta_min')) + ' to ' + val(d.g('_diffrn_reflns_theta_max')) + '°');
+      const lim = (h) => [T(val(d.g('_diffrn_reflns_limit_' + h + '_min')) + ' ≤ '), I(h), T(' ≤ ' + val(d.g('_diffrn_reflns_limit_' + h + '_max')))];
+      add('Index ranges', lim('h').concat([T(', ')], lim('k'), [T(', ')], lim('l')));
+      add('Reflections collected', val(d.g('_diffrn_reflns_number')));
+      add('Independent reflections', [T(val(d.g('_reflns_number_total')) + ' ['), I('R'), SUB('int'), T(' = ' + val(d.g('_diffrn_reflns_av_r_equivalents')) + ']')]);
+      const thf = d.g('_diffrn_reflns_theta_full'); const fr = d.g('_diffrn_measured_fraction_theta_full');
+      if (thf || fr) add('Completeness to θ = ' + val(thf) + '°', fr && !isNaN(parseFloat(fr)) ? (parseFloat(fr) * 100).toFixed(1) + ' %' : '?');
+      const at = d.g('_exptl_absorpt_correction_type');
+      add('Absorption correction', at ? (ABS_TYPES[at.toLowerCase()] || cap(at)) : '?');
+      const tx = d.g('_exptl_absorpt_correction_t_max'), tn = d.g('_exptl_absorpt_correction_t_min');
+      if (tx || tn) add('Max. and min. transmission', val(tx) + ' and ' + val(tn));
+      const mt = (d.g('_refine_ls_matrix_type') || 'full').toLowerCase();
+      add('Refinement method', [T((MATRIX[mt] || cap(mt)) + ' least-squares on '), I('F'), SUP('2')]);
+      add('Data / restraints / parameters', val(d.g('_refine_ls_number_reflns')) + ' / ' + val(d.g('_refine_ls_number_restraints')) + ' / ' + val(d.g('_refine_ls_number_parameters')));
+      add([T('Goodness-of-fit on '), I('F'), SUP('2')], val(d.g('_refine_ls_goodness_of_fit_ref', '_refine_ls_goodness_of_fit_all')));
+      add([T('Final '), I('R'), T(' indices ['), I('I'), T(' > 2σ('), I('I'), T(')]')],
+        [I('R'), SUB('1'), T(' = ' + val(d.g('_refine_ls_r_factor_gt', '_refine_ls_r_factor_obs')) + ', '), I('wR'), SUB('2'), T(' = ' + val(d.g('_refine_ls_wr_factor_gt', '_refine_ls_wr_factor_obs')))]);
+      add([I('R'), T(' indices (all data)')],
+        [I('R'), SUB('1'), T(' = ' + val(d.g('_refine_ls_r_factor_all')) + ', '), I('wR'), SUB('2'), T(' = ' + val(d.g('_refine_ls_wr_factor_ref', '_refine_ls_wr_factor_all')))]);
+      const flack = d.g('_refine_ls_abs_structure_flack');
+      if (flack) add('Absolute structure parameter', flack);
+      add('Extinction coefficient', d.g('_refine_ls_extinction_coef') || 'n/a');
+      add('Largest diff. peak and hole', [T(val(d.g('_refine_diff_density_max')) + ' and ' + val(d.g('_refine_diff_density_min')) + ' e·' + A), SUP('−3')]);
+      parts.push(table([{ w: 3700, align: 'left' }, { w: 2700, align: 'left' }, { w: 2626, align: 'left' }], rows));
+    }
+
+    const coordTable = (atoms) => {
+      const head = { header: true, bottom: true, cells: ['', [I('x')], [I('y')], [I('z')], [I('U'), T('(eq)')]] };
+      const rows = [head].concat(atoms.map(a => ({ cells: [L(a['_atom_site_label']),
+        scaled(a['_atom_site_fract_x'], 4), scaled(a['_atom_site_fract_y'], 4), scaled(a['_atom_site_fract_z'], 4),
+        a['_atom_site_u_iso_or_equiv'] != null ? scaled(a['_atom_site_u_iso_or_equiv'], 3) : ''] })));
+      parts.push(table([{ w: 1500 }, { w: 1750, align: 'num' }, { w: 1750, align: 'num' }, { w: 1750, align: 'num' }, { w: 1550, align: 'num' }], rows));
+    };
+    if (want('atoms') && d.heavy.length) {
+      caption([T('Atomic coordinates (× 10'), SUP('4'), T(') and equivalent isotropic displacement parameters (' + A), SUP('2'), T(' × 10'), SUP('3'),
+        T(') for ' + comp + '.  '), I('U'), T('(eq) is defined as one third of the trace of the orthogonalized '), I('U'), SUP('ij', { i: true }), T(' tensor.')]);
+      coordTable(d.heavy);
+    }
+
+    const geomTable = (title, bonds, angles) => {
+      caption([T(title + ' [' + A + '] and angles [°] for ' + comp + '.')]);
+      const sym = symTracker(d.ops);
+      const rows = [];
+      for (const b of bonds) rows.push({ cells: [
+        L(b['_geom_bond_atom_site_label_1']) + sym.mark(b['_geom_bond_site_symmetry_1']) + '-' + L(b['_geom_bond_atom_site_label_2']) + sym.mark(b['_geom_bond_site_symmetry_2']),
+        val(b['_geom_bond_distance'])] });
+      if (bonds.length && angles.length) rows.push({ cells: ['', ''] });
+      for (const a of angles) rows.push({ cells: [
+        L(a['_geom_angle_atom_site_label_1']) + sym.mark(a['_geom_angle_site_symmetry_1']) + '-' + L(a['_geom_angle_atom_site_label_2']) + sym.mark(a['_geom_angle_site_symmetry_2']) + '-' + L(a['_geom_angle_atom_site_label_3']) + sym.mark(a['_geom_angle_site_symmetry_3']),
+        val(a['_geom_angle'])] });
+      if (!rows.length) rows.push({ cells: ['', ''] });
+      parts.push(table([{ w: 3400 }, { w: 1900, align: 'dec' }], rows));
+      symNote(sym);
+    };
+    if (want('bondsSel') && (d.bondsSel.length || d.anglesSel.length)) geomTable('Selected bond lengths', d.bondsSel, d.anglesSel);
+    if (want('bonds') && (d.bonds.length || d.angles.length)) geomTable('Bond lengths', d.bonds, d.angles);
+
+    if (want('aniso') && d.aniso.length) {
+      const U = ij => [I('U'), SUP(ij)];
+      caption([T('Anisotropic displacement parameters (' + A), SUP('2'), T(' × 10'), SUP('3'), T(') for ' + comp + '.  The anisotropic displacement factor exponent takes the form: −2π'), SUP('2'),
+        T('['), I('h'), SUP('2'), I('a'), T('*'), SUP('2'), I('U'), SUP('11'), T(' + ... + 2'), I('h'), T(' '), I('k'), T(' '), I('a'), T('* '), I('b'), T('* '), I('U'), SUP('12'), T('].')]);
+      const rows = [{ header: true, bottom: true, cells: ['', U('11'), U('22'), U('33'), U('23'), U('13'), U('12')] }]
+        .concat(d.aniso.map(a => ({ cells: [L(a['_atom_site_aniso_label'])].concat(['11', '22', '33', '23', '13', '12'].map(k => scaled(a['_atom_site_aniso_u_' + k], 3))) })));
+      parts.push(table([{ w: 1400 }].concat(Array(6).fill({ w: 1270, align: 'num' })), rows));
+    }
+
+    if (want('hatoms') && d.hyd.length) {
+      caption([T('Hydrogen coordinates (× 10'), SUP('4'), T(') and isotropic displacement parameters (' + A), SUP('2'), T(' × 10'), SUP('3'), T(') for ' + comp + '.')]);
+      coordTable(d.hyd);
+    }
+
+    const torsTable = (title, list) => {
+      caption([T(title + ' [°] for ' + comp + '.')]);
+      const sym = symTracker(d.ops);
+      const rows = list.map(t => ({ cells: [
+        [1, 2, 3, 4].map(k => L(t['_geom_torsion_atom_site_label_' + k]) + sym.mark(t['_geom_torsion_site_symmetry_' + k])).join('-'),
+        val(t['_geom_torsion'])] }));
+      parts.push(table([{ w: 4200 }, { w: 1900, align: 'dec' }], rows));
+      symNote(sym);
+    };
+    if (want('torsSel') && d.torsSel.length) torsTable('Selected torsion angles', d.torsSel);
+    if (want('tors') && d.tors.length) torsTable('Torsion angles', d.tors);
+
+    if (want('hbond') && d.hb.length) {
+      caption([T('Hydrogen bonds for ' + comp + ' [' + A + ' and °].')]);
+      const sym = symTracker(d.ops);
+      const rows = [{ header: true, bottom: true, cells: ['D-H...A', [I('d'), T('(D-H)')], [I('d'), T('(H...A)')], [I('d'), T('(D...A)')], [T('∠(DHA)')]] }]
+        .concat(d.hb.map(h => ({ cells: [
+          L(h['_geom_hbond_atom_site_label_d']) + '-' + L(h['_geom_hbond_atom_site_label_h']) + '...' + L(h['_geom_hbond_atom_site_label_a']) + sym.mark(h['_geom_hbond_site_symmetry_a']),
+          val(h['_geom_hbond_distance_dh']), val(h['_geom_hbond_distance_ha']), val(h['_geom_hbond_distance_da']), val(h['_geom_hbond_angle_dha'])] })));
+      parts.push(table([{ w: 2800 }, { w: 1500, align: 'dec' }, { w: 1500, align: 'dec' }, { w: 1500, align: 'dec' }, { w: 1500, align: 'dec' }], rows));
+      symNote(sym);
+    }
+    return parts;
+  }
+
+  function documentXml(parts) {
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>' +
+      parts.join('') +
+      '<w:sectPr><w:pgSz w:w="' + PAGE_W + '" w:h="' + PAGE_H + '"/><w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>' +
+      '</w:body></w:document>';
+  }
+  const STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Times New Roman" w:cs="Times New Roman"/>' +
+    '<w:sz w:val="20"/><w:szCs w:val="20"/><w:lang w:val="en-US" w:eastAsia="ja-JP"/></w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
+    '<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/>' +
+    '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>' +
+    '</w:styles>';
+  const CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '</Types>';
+  const ROOT_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+    '</Relationships>';
+  const DOC_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    '</Relationships>';
+  const core = title => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+    '<dc:title>' + esc(title) + '</dc:title><dc:creator>CIF completion tool</dc:creator></cp:coreProperties>';
+
+  // ----- minimal ZIP (stored) -----
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function zip(files) {
+    const enc = new TextEncoder(); const chunks = []; const central = []; let offset = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name); const data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+      const crc = crc32(data);
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+      lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      chunks.push(new Uint8Array(lh.buffer), name, data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+      ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true);
+      ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+      central.push(new Uint8Array(ch.buffer), name);
+      offset += 30 + name.length + data.length;
+    }
+    const cdSize = central.reduce((a, c) => a + c.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    const all = chunks.concat(central, [new Uint8Array(end.buffer)]);
+    const out = new Uint8Array(all.reduce((a, c) => a + c.length, 0));
+    let p = 0; for (const c of all) { out.set(c, p); p += c.length; }
+    return out;
+  }
+
+  function build(text, opts) {
+    const parts = buildBody(text, opts);
+    if (!parts.length) parts.push(para([T('No tables selected.')]));
+    return zip([
+      { name: '[Content_Types].xml', data: CONTENT_TYPES },
+      { name: '_rels/.rels', data: ROOT_RELS },
+      { name: 'docProps/core.xml', data: core('Tables for ' + (opts.compound || '')) },
+      { name: 'word/document.xml', data: documentXml(parts) },
+      { name: 'word/styles.xml', data: STYLES },
+      { name: 'word/_rels/document.xml.rels', data: DOC_RELS }
+    ]);
+  }
+
+  return { TABLES, analyze, build, scaled, formatOp };
+})();
+// CORE END
+
+(() => {
+  const $ = id => document.getElementById(id);
+
+  // ---------- language (ja / en) ----------
+  // Japanese text lives in the markup (data-i / data-ip / data-ia) and is captured at start-up;
+  // English text is in EN. Strings built by script are in D.
+  const EN = {
+    h1: 'CIF Completion Tool',
+    lede: 'Fills the <code>?</code> placeholders left in a refined CIF with values from the files written by your diffractometer software, and adds the crystal habit, colour and the software used.',
+    introSum: 'Introduction: what this tool does',
+    flow: 'Refinement CIF (SHELXL) + measurement data (.cif_od / .pcf, etc.) → completed CIF → manual edits → checkCIF / Word tables',
+    dt1: 'Items that are changed',
+    dd1: 'Only items whose value is <code>?</code> are filled. Items that already have a value are left as they are. After processing, a list shows which item was filled from which source.',
+    ddRigaku: 'Reads the <code>.cif_od</code> written by CrysAlisPro (or a <code>.cif</code> exported from CrysAlisPro).',
+    ddBruker: 'Reads the <code>.pcf</code> written by XPREP. Reading the <code>.p4p</code> (crystal colour, habit, size) and the SADABS <code>.abs</code> (T<sub>min</sub>/T<sub>max</sub>) is also supported on an experimental basis.',
+    dt3: 'Tables',
+    dd3: 'Creates tables for a paper\'s SI (crystal data, atomic coordinates, bond lengths and angles, etc.) as a Word file from the completed CIF. To make tables only from an already finished CIF, load it in step 1 and run step 4.',
+    dt4: 'Other',
+    dd4: 'CIF-format files from other makers\' instruments can be read too. Several files can be given at once; values from files added earlier take priority.',
+    li1: 'Mainly intended for structures refined with ShelXle or SHELXL. Olex2 imports the measurement data automatically, so this is usually not needed there.',
+    li2: 'The result can be edited directly on this page. Always use checkCIF for the final check.',
+    s1h: 'Refinement CIF',
+    s1p: 'The CIF written by a refinement program such as SHELXL. A modified copy of this file is produced.',
+    chooseFile: 'Choose file',
+    dropHint: 'or drag and drop here',
+    s2h: 'Measurement data files',
+    s2p: 'Several files can be given. If omitted, only what you enter in step 3 is written.',
+    addFiles: 'Add files',
+    s3h: 'Crystal and software information',
+    s3p: 'Habit and colour are filled in automatically if the measurement data contain them. Empty fields stay <code>?</code>.',
+    lblDesc: 'Crystal habit',
+    optNone: '(not specified)',
+    optOther: 'Other (type in)',
+    lblColour: 'Crystal colour',
+    lblGfx: 'Molecular graphics',
+    lblPub: 'Publication material',
+    phDesc: 'e.g. thin plate',
+    phColour: 'e.g. dark red',
+    phGfxOther: 'Software name and citation (e.g. Avogadro 1.2 (Hanwell et al., 2012))',
+    phPubOther: 'Software name and citation',
+    s4h: 'Run the completion',
+    s4p: 'Available once the refinement CIF is loaded. The original file is not modified.',
+    runBtn: 'Complete the CIF',
+    confirmMsg: 'Manual edits will be lost. Run again?',
+    confirmYes: 'Discard and re-run',
+    confirmNo: 'Cancel',
+    s5h: 'Review and edit',
+    s5p: 'Check the written values in the list below and correct them in the editor if needed.',
+    thItem: 'Item', thValue: 'Value', thStatus: 'Status', thSource: 'Source',
+    qh: 'Items that are still <code>?</code>',
+    qp: 'Click one to jump to its place in the editor. Check whether any of them will trigger checkCIF alerts.',
+    editorH: 'CIF editor',
+    edited: 'edited',
+    ariaEditor: 'Completed CIF',
+    dlBtn: 'Download CIF',
+    copyBtn: 'Copy all',
+    checkcif: 'Open checkCIF ↗',
+    resetBtn: 'Revert to freshly completed',
+    viewerNote: 'Because this page is open inside Claude, the file cannot be saved as .cif directly. It is saved as <code>_edit.cif.txt</code>; delete the trailing <code>.txt</code>. If you open the downloaded HTML file in a browser, it is saved as <code>.cif</code>.',
+    s6h: 'Make tables (Word)',
+    s6p: 'Creates tables (crystal data, atomic coordinates, bond lengths/angles and more) as .docx. They are made from the current content of the editor above, so your edits are included. Font: Times New Roman.',
+    lblCompound: 'Compound name (used in titles)',
+    phCompound: 'Data block name',
+    lblStart: 'First table number',
+    brk: 'Put atom names in brackets (C1 → C(1))',
+    docxBtn: 'Create Word file',
+    foot1: 'CIF Completion Tool v2.2 · Only single-valued items whose value is <code>?</code> are rewritten (values inside loops are not touched).',
+    foot2: 'Files are processed in the browser only.'
+  };
+  const JA = {};
+  document.querySelectorAll('[data-i]').forEach(e => { JA[e.dataset.i] = e.innerHTML; });
+  document.querySelectorAll('[data-ip]').forEach(e => { JA[e.dataset.ip] = e.getAttribute('placeholder'); });
+  document.querySelectorAll('[data-ia]').forEach(e => { JA[e.dataset.ia] = e.getAttribute('aria-label'); });
+  const pl = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  const D = {
+    noData: { ja: 'data_ ブロックが見つかりません', en: 'No data_ block found' },
+    qCount: { ja: n => '? の項目 ' + n + ' 件', en: n => pl(n, 'item') + ' with ?' },
+    remove: { ja: '取り消す', en: 'Remove' },
+    del: { ja: '削除', en: 'Remove' },
+    usable: { ja: n => '使える項目 ' + n + ' 件', en: n => pl(n, 'usable item') },
+    prio: { ja: '優先', en: 'Priority' },
+    type_p4p: { ja: 'Bruker p4p（試験的）', en: 'Bruker p4p (experimental)' },
+    type_abs: { ja: 'SADABS abs（試験的）', en: 'SADABS abs (experimental)' },
+    type_cif_od: { ja: 'Rigaku cif_od', en: 'Rigaku cif_od' },
+    type_pcf: { ja: 'Bruker pcf', en: 'Bruker pcf' },
+    type_cfx: { ja: 'STOE cfx', en: 'STOE cfx' },
+    type_cif: { ja: 'CIF形式', en: 'CIF format' },
+    none: { ja: '（指定しない）', en: '(not specified)' },
+    other: { ja: 'その他（手入力）', en: 'Other (type in)' },
+    eg: { ja: '例: ', en: 'e.g. ' },
+    verPh: { ja: 'バージョン（例: 1.5）', en: 'Version (e.g. 1.5)' },
+    verPhPlain: { ja: 'バージョン', en: 'Version' },
+    pvNone: { ja: '書き込まない（? のまま）', en: 'Nothing will be written (stays ?)' },
+    pvVal: { ja: '書き込む値: ', en: 'Value to be written: ' },
+    needVer: { ja: 'バージョンが未入力です。', en: 'No version entered.' },
+    needFile: { ja: '手順1のファイルが必要です。', en: 'The file from step 1 is required.' },
+    st_filled: { ja: '補完', en: 'Filled' },
+    st_kept: { ja: '既存値を維持', en: 'Kept as is' },
+    st_missing: { ja: 'データなし', en: 'No data' },
+    st_absent: { ja: 'CIFに項目なし', en: 'Not in CIF' },
+    srcExisting: { ja: '既存の値', en: 'Existing value' },
+    srcInput: { ja: '入力値', en: 'Entered value' },
+    noneQ: { ja: 'ありません', en: 'None' },
+    tbl_crystal: { ja: '結晶データと精密化条件', en: 'Crystal data and structure refinement' },
+    tbl_atoms: { ja: '原子座標と等価等方性変位パラメータ', en: 'Atomic coordinates and equivalent isotropic displacement parameters' },
+    tbl_bondsSel: { ja: '主な結合長と結合角（Selected）', en: 'Selected bond lengths and angles' },
+    tbl_bonds: { ja: '結合長と結合角（全数）', en: 'All bond lengths and angles' },
+    tbl_aniso: { ja: '異方性変位パラメータ', en: 'Anisotropic displacement parameters' },
+    tbl_hatoms: { ja: '水素原子座標', en: 'Hydrogen atom coordinates' },
+    tbl_torsSel: { ja: '主なねじれ角（Selected）', en: 'Selected torsion angles' },
+    tbl_tors: { ja: 'ねじれ角（全数）', en: 'All torsion angles' },
+    tbl_hbond: { ja: '水素結合', en: 'Hydrogen bonds' },
+    unit_atoms: { ja: n => n + ' 原子', en: n => pl(n, 'atom') },
+    unit_rows: { ja: n => n + ' 行', en: n => pl(n, 'row') },
+    why_crystal: { ja: '格子定数などの単一値項目が見つかりません', en: 'No single-valued items such as cell parameters were found' },
+    why_atoms: { ja: '原子座標の loop がありません', en: 'No atomic coordinate loop' },
+    why_bondsSel: { ja: '_geom_*_publ_flag が yes の行がありません', en: 'No rows with _geom_*_publ_flag = yes' },
+    why_bonds: { ja: '結合長・結合角がありません（SHELXL の ACTA）', en: 'No bond lengths or angles (SHELXL: ACTA)' },
+    why_aniso: { ja: '異方性変位パラメータがありません', en: 'No anisotropic displacement parameters' },
+    why_hatoms: { ja: '水素原子がありません', en: 'No hydrogen atoms' },
+    why_torsSel: { ja: '_geom_torsion_publ_flag が yes の行がありません', en: 'No rows with _geom_torsion_publ_flag = yes' },
+    why_tors: { ja: 'ねじれ角がありません（SHELXL の CONF）', en: 'No torsion angles (SHELXL: CONF)' },
+    why_hbond: { ja: '水素結合がありません（SHELXL の HTAB）', en: 'No hydrogen bonds (SHELXL: HTAB)' },
+    nTables: { ja: n => n + ' 個の表を作成します。', en: n => pl(n, 'table') + ' will be created.' },
+    pickTables: { ja: '作成する表を選んでください。', en: 'Select the tables to create.' },
+    docxErr: { ja: m => '表の作成中にエラーが発生しました: ' + m, en: m => 'An error occurred while creating the tables: ' + m },
+    savedAs: { ja: n => n + ' を保存しました。', en: n => 'Saved ' + n + '.' },
+    cancelled: { ja: '保存をキャンセルしました。', en: 'Save cancelled.' },
+    docxNoSave: { ja: 'この表示では保存できません。ダウンロードしたHTMLファイルから実行してください。', en: 'Saving is not possible in this view. Please use the downloaded HTML file instead.' },
+    downloaded: { ja: n => n + ' をダウンロードしました。', en: n => 'Downloaded ' + n + '.' },
+    savedTxt: { ja: n => n + '.txt として保存しました。末尾の .txt を削除してから使ってください。', en: n => 'Saved as ' + n + '.txt. Delete the trailing .txt before using it.' },
+    cifNoSave: { ja: 'この表示では保存できません。「全文をコピー」を使ってください。', en: 'Saving is not possible in this view. Use "Copy all" instead.' },
+    copied: { ja: '全文をクリップボードにコピーしました。', en: 'Copied the whole text to the clipboard.' },
+    copyFail: { ja: '自動コピーできませんでした。全文を選択したので Ctrl+C でコピーしてください。', en: 'Automatic copy failed. The whole text is selected; press Ctrl+C to copy it.' },
+    resetDone: { ja: '補完直後の内容に戻しました。', en: 'Reverted to the freshly completed content.' },
+    dlViewer: { ja: 'CIFを保存（.txt 付き）', en: 'Save CIF (with .txt)' }
+  };
+  let lang = 'ja';
+  function tx(k, ...a) {
+    const e = D[k]; const v = e ? e[lang] : null;
+    return v == null ? k : (typeof v === 'function' ? v(...a) : v);
+  }
+
+  const GFX = [
+    { id: '', label: '（指定しない）', tpl: '' },
+    { id: 'olex2', label: 'Olex2', tpl: 'Olex2 {v} (Dolomanov et al., 2009)' },
+    { id: 'shelxle', label: 'ShelXle', tpl: 'ShelXle {v} (H\\"ubschle et al., 2011)' },
+    { id: 'mercury', label: 'Mercury', tpl: 'Mercury {v} (Macrae et al., 2020)' },
+    { id: 'ortep', label: 'ORTEP-3 for Windows', tpl: 'ORTEP-3 for Windows {v} (Farrugia, 2012)' },
+    { id: 'diamond', label: 'DIAMOND', tpl: 'DIAMOND {v} (Crystal Impact)' },
+    { id: 'vesta', label: 'VESTA', tpl: 'VESTA {v} (Momma & Izumi, 2011)' },
+    { id: '__other', label: 'その他（手入力）', tpl: '' }
+  ];
+  const PUB = [
+    { id: '', label: '（指定しない）', tpl: '' },
+    { id: 'olex2', label: 'Olex2', tpl: 'Olex2 {v} (Dolomanov et al., 2009)' },
+    { id: 'shelxl', label: 'SHELXL', tpl: 'SHELXL-{v} (Sheldrick, 2015)', ph: '2019/3' },
+    { id: 'publcif', label: 'publCIF', tpl: 'publCIF {v} (Westrip, 2010)' },
+    { id: 'finalcif', label: 'FinalCif', tpl: 'FinalCif {v} (Kratzert)' },
+    { id: 'ciftab', label: 'CIFTAB', tpl: 'CIFTAB-{v} (Sheldrick, 2014)', ph: '2014/2' },
+    { id: '__other', label: 'その他（手入力）', tpl: '' }
+  ];
+
+  const state = { target: null, sources: [], baseline: '', edited: false, userTouched: { desc: false, colour: false, compound: false }, checks: {}, analysis: null };
+
+  // ---------- storage (per-viewer convenience only) ----------
+  const store = {
+    get(k) { try { return localStorage.getItem('cifTool.' + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('cifTool.' + k, v); } catch (e) {} }
+  };
+
+  // ---------- file reading ----------
+  const readText = file => new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsText(file);
+  });
+  const normalize = t => t.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const ext = name => (name.match(/\.([^.]+)$/) || [, ''])[1].toLowerCase();
+
+  async function loadTarget(file) {
+    const raw = await readText(file);
+    setTarget(file.name, raw);
+  }
+  function setTarget(name, raw) {
+    const text = normalize(raw);
+    const items = CIF.parseItems(text);
+    state.target = { name, text, eol: /\r\n/.test(raw) ? '\r\n' : '\n', count: CIF.questionMarks(text).length, hasData: /^data_/m.test(text) };
+    renderTarget(items);
+    refreshRun();
+  }
+
+  async function addSources(files) {
+    for (const f of files) {
+      const raw = normalize(await readText(f));
+      addSource(f.name, raw, f.size + ':' + f.lastModified);
+    }
+  }
+  function addSource(name, text, sig) {
+    const key = name + '|' + sig;
+    if (state.sources.some(s => s.key === key)) return;
+    const e = ext(name);
+    let type, items;
+    if (e === 'p4p') { type = 'p4p'; items = CIF.parseP4P(text); }
+    else if (e === 'abs') { type = 'abs'; items = CIF.parseABS(text); }
+    else {
+      type = ['cif_od', 'pcf', 'cfx'].includes(e) ? e : 'cif';
+      items = CIF.parseItems(text);
+    }
+    const relevant = CIF.COPY_FIELDS.concat(['_exptl_crystal_description', '_exptl_crystal_colour'])
+      .filter(t => { const v = items.get(t.toLowerCase()); return v && !(v.kind === 'bare' && (v.raw === '?' || v.raw === '.')); }).length;
+    state.sources.push({ key, name, type, items, relevant });
+    renderSources();
+    prefillCrystal();
+  }
+
+  // ---------- rendering ----------
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  function renderTarget() {
+    const list = $('list1'); list.textContent = '';
+    if (!state.target) { $('step1').classList.remove('done'); return; }
+    const li = el('li');
+    li.append(el('span', 'file-name', state.target.name));
+    if (!state.target.hasData) li.append(el('span', 'tag warn', tx('noData')));
+    li.append(el('span', 'tag ' + (state.target.count ? 'warn' : 'ok'), tx('qCount', state.target.count)));
+    const rm = el('button', 'btn quiet', tx('remove')); rm.type = 'button';
+    rm.onclick = () => { state.target = null; renderTarget(); refreshRun(); };
+    li.append(rm);
+    list.append(li);
+    $('step1').classList.add('done');
+  }
+
+  function renderSources() {
+    const list = $('list2'); list.textContent = '';
+    state.sources.forEach((s, i) => {
+      const li = el('li');
+      li.append(el('span', 'file-name', s.name));
+      li.append(el('span', 'file-meta', tx('type_' + s.type)));
+      li.append(el('span', 'tag ' + (s.relevant ? 'ok' : 'warn'), tx('usable', s.relevant)));
+      if (i === 0 && state.sources.length > 1) li.append(el('span', 'tag accent', tx('prio')));
+      const rm = el('button', 'btn quiet', tx('del')); rm.type = 'button';
+      rm.onclick = () => { state.sources = state.sources.filter(x => x !== s); renderSources(); };
+      li.append(rm);
+      list.append(li);
+    });
+    $('step2').classList.toggle('done', state.sources.length > 0);
+  }
+
+  function prefillCrystal() {
+    const find = tag => {
+      for (const s of state.sources) {
+        const v = s.items.get(tag);
+        if (v && !(v.kind === 'bare' && (v.raw === '?' || v.raw === '.')) && String(v.value).trim()) return String(v.value).trim();
+      }
+      return '';
+    };
+    const d = find('_exptl_crystal_description');
+    if (d && !state.userTouched.desc) {
+      const sel = $('desc'); const opt = [...sel.options].find(o => o.value.toLowerCase() === d.toLowerCase());
+      if (opt && opt.value) { sel.value = opt.value; $('descOther').hidden = true; }
+      else { sel.value = '__other'; $('descOther').hidden = false; $('descOther').value = d; }
+    }
+    const c = find('_exptl_crystal_colour');
+    if (c && !state.userTouched.colour) $('colour').value = c;
+  }
+
+  function fillSelect(sel, list) {
+    const cur = sel.value;
+    sel.textContent = '';
+    for (const o of list) { const op = el('option', null, o.id === '' ? tx('none') : o.id === '__other' ? tx('other') : o.label); op.value = o.id; sel.append(op); }
+    if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  }
+  function composed(kind) {
+    const list = kind === 'gfx' ? GFX : PUB;
+    const sel = $(kind).value; const ver = $(kind + 'Ver').value.trim();
+    if (sel === '__other') return { text: $(kind + 'Other').value.trim(), needVer: false };
+    const o = list.find(x => x.id === sel);
+    if (!o || !o.tpl) return { text: '', needVer: false };
+    const text = ver ? o.tpl.replace('{v}', ver) : o.tpl.replace(/[- ]?\{v\}/, '');
+    return { text, needVer: !ver };
+  }
+  function renderSoftware(kind) {
+    const list = kind === 'gfx' ? GFX : PUB;
+    const sel = $(kind).value;
+    const o = list.find(x => x.id === sel);
+    $(kind + 'Other').hidden = sel !== '__other';
+    $(kind + 'Ver').hidden = sel === '__other' || sel === '';
+    $(kind + 'Ver').placeholder = o && o.ph ? tx('eg') + o.ph : tx('verPh');
+    const c = composed(kind);
+    const pv = $(kind + 'Preview'); pv.textContent = '';
+    if (!c.text) { pv.append(tx('pvNone')); pv.classList.remove('warn'); return; }
+    pv.append(tx('pvVal'));
+    pv.append(el('b', null, CIF.quote(c.text, true).raw));
+    if (c.needVer) { pv.append(el('br')); pv.append(el('span', 'note warn', tx('needVer'))); }
+  }
+
+  function refreshRun() {
+    const ok = !!state.target;
+    $('runBtn').disabled = !ok;
+    $('runNote').textContent = ok ? '' : tx('needFile');
+    $('runNote').hidden = ok;
+  }
+
+  const STATUS = { filled: 'ok', kept: '', missing: 'warn', absent: '' };
+
+  function runComplete() {
+    const desc = $('desc').value === '__other' ? $('descOther').value : $('desc').value;
+    const user = [
+      { tag: '_exptl_crystal_description', value: desc, force: false },
+      { tag: '_exptl_crystal_colour', value: $('colour').value, force: true },
+      { tag: '_computing_molecular_graphics', value: composed('gfx').text, force: true },
+      { tag: '_computing_publication_material', value: composed('pub').text, force: true }
+    ];
+    const res = CIF.complete(state.target.text, state.sources, user);
+    state.baseline = res.text;
+    $('editor').value = res.text;
+    setEdited(false);
+    renderReport(res.report);
+    renderQuestions();
+    renderTables();
+    $('step5').hidden = false;
+    $('step6').hidden = false;
+    $('step4').classList.add('done');
+    setStatus('');
+    $('step5').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  function renderReport(report) {
+    state.lastReport = report;
+    const body = $('reportBody'); body.textContent = '';
+    const order = { filled: 0, missing: 1, kept: 2, absent: 3 };
+    const rows = report.slice().sort((a, b) => order[a.status] - order[b.status]);
+    const counts = { filled: 0, kept: 0, missing: 0, absent: 0 };
+    for (const r of rows) {
+      counts[r.status]++;
+      const tr = el('tr');
+      tr.append(el('td', 't', r.tag));
+      const v = r.value.length > 160 ? r.value.slice(0, 160) + '…' : r.value;
+      tr.append(el('td', 'v', v || '—'));
+      const td = el('td', 's'); td.append(el('span', 'tag ' + STATUS[r.status], tx('st_' + r.status))); tr.append(td);
+      tr.append(el('td', 'src', r.source === '@existing' ? tx('srcExisting') : r.source === '@input' ? tx('srcInput') : (r.source || '')));
+      body.append(tr);
+    }
+    const sm = $('summary'); sm.textContent = '';
+    sm.append(el('span', 'tag ok', tx('st_filled') + ' ' + counts.filled));
+    sm.append(el('span', 'tag warn', tx('st_missing') + ' ' + counts.missing));
+    sm.append(el('span', 'tag', tx('st_kept') + ' ' + counts.kept));
+    if (counts.absent) sm.append(el('span', 'tag', tx('st_absent') + ' ' + counts.absent));
+  }
+
+  function renderQuestions() {
+    const box = $('qlist'); box.textContent = '';
+    const text = $('editor').value;
+    const qs = CIF.questionMarks(text);
+    if (!qs.length) { box.append(el('span', 'tag ok', tx('noneQ'))); return; }
+    for (const q of qs) {
+      const b = el('button', null, q.tag); b.type = 'button';
+      b.onclick = () => jumpTo(q.valueStart, q.valueEnd);
+      box.append(b);
+    }
+  }
+
+  function jumpTo(start, end) {
+    const ta = $('editor');
+    ta.focus();
+    ta.setSelectionRange(start, end);
+    const line = ta.value.slice(0, start).split('\n').length - 1;
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    ta.scrollTop = Math.max(0, line * lh - ta.clientHeight / 3);
+  }
+
+  function setEdited(v) { state.edited = v; $('editedTag').hidden = !v; }
+  function setStatus(msg, kind) { const s = $('status'); s.textContent = msg; s.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  // ---------- Word tables ----------
+  function renderTables() {
+    const a = REPORT.analyze($('editor').value);
+    state.analysis = a;
+    if (!state.userTouched.compound) $('compound').value = a.name;
+    const list = $('tableChecks'); list.textContent = '';
+    let any = 0;
+    for (const t of REPORT.TABLES) {
+      const inf = a.info[t.id]; const ok = inf.n > 0;
+      if (!(t.id in state.checks)) state.checks[t.id] = null;
+      const checked = ok && state.checks[t.id] !== false;
+      if (checked) any++;
+      const li = el('li', ok ? '' : 'off');
+      const lab = el('label');
+      const cb = el('input'); cb.type = 'checkbox'; cb.id = 'tbl-' + t.id; cb.checked = checked; cb.disabled = !ok;
+      cb.addEventListener('change', () => { state.checks[t.id] = cb.checked; updateDocxBtn(); });
+      lab.append(cb, el('span', null, tx('tbl_' + t.id)));
+      li.append(lab);
+      if (ok && inf.unit) li.append(el('span', 'tag', tx('unit_' + inf.unit, inf.n)));
+      if (!ok) li.append(el('span', 'why', tx('why_' + inf.why)));
+      list.append(li);
+    }
+    updateDocxBtn();
+  }
+  function selectedTables() {
+    return REPORT.TABLES.map(t => t.id).filter(id => { const cb = $('tbl-' + id); return cb && cb.checked && !cb.disabled; });
+  }
+  function updateDocxBtn() {
+    const n = selectedTables().length;
+    $('docxBtn').disabled = n === 0;
+    $('docxNote').textContent = n ? tx('nTables', n) : tx('pickTables');
+  }
+  async function makeDocx() {
+    const tables = selectedTables(); if (!tables.length) return;
+    let bytes;
+    try {
+      bytes = REPORT.build($('editor').value, {
+        compound: $('compound').value.trim() || (state.analysis && state.analysis.name) || '',
+        start: $('tableStart').value, brackets: $('brackets').checked, tables
+      });
+    } catch (e) {
+      setDocxStatus(tx('docxErr', e && e.message ? e.message : e), 'err'); return;
+    }
+    const base = state.target ? state.target.name.replace(/\.[^.]+$/, '') : 'structure';
+    const name = base + '_tables.docx';
+    const inViewer = !!(window.claude && typeof window.claude.use === 'function');
+    if (inViewer) {
+      const dl = await getDownloads();
+      if (dl) {
+        try { await dl.save({ filename: name, data: new Blob([bytes]) }); setDocxStatus(tx('savedAs', name), 'ok'); }
+        catch (e) {
+          if (e && e.code === 'declined') setDocxStatus(tx('cancelled'));
+          else setDocxStatus(tx('docxNoSave'), 'err');
+        }
+        return;
+      }
+    }
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setDocxStatus(tx('downloaded', name), 'ok');
+  }
+  function setDocxStatus(msg, kind) { const s = $('docxStatus'); s.textContent = msg; s.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  // ---------- output ----------
+  function outputName() {
+    const base = state.target ? state.target.name.replace(/\.[^.]+$/, '') : 'structure';
+    return base + '_edit.cif';
+  }
+  function outputText() {
+    const t = $('editor').value;
+    return state.target && state.target.eol === '\r\n' ? t.replace(/\n/g, '\r\n') : t;
+  }
+
+  let downloadsCap;
+  async function getDownloads() {
+    if (downloadsCap !== undefined) return downloadsCap;
+    downloadsCap = null;
+    if (window.claude && typeof window.claude.use === 'function') {
+      try { downloadsCap = await window.claude.use('downloads'); } catch (e) { downloadsCap = null; }
+    }
+    return downloadsCap;
+  }
+
+  async function download() {
+    const name = outputName(); const data = outputText();
+    const inViewer = !!(window.claude && typeof window.claude.use === 'function');
+    if (inViewer) {
+      const dl = await getDownloads();
+      if (dl) {
+        try {
+          await dl.save({ filename: name + '.txt', data });
+          setStatus(tx('savedTxt', name), 'ok');
+        } catch (e) {
+          if (e && e.code === 'declined') setStatus(tx('cancelled'));
+          else setStatus(tx('cifNoSave'), 'err');
+        }
+        return;
+      }
+    }
+    const blob = new Blob([data], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus(tx('downloaded', name), 'ok');
+  }
+
+  async function copyAll() {
+    const ta = $('editor');
+    try {
+      await navigator.clipboard.writeText(ta.value);
+      setStatus(tx('copied'), 'ok');
+    } catch (e) {
+      ta.focus(); ta.select();
+      setStatus(tx('copyFail'), 'err');
+    }
+  }
+
+  // ---------- drag & drop ----------
+  ['dragover', 'drop'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+  function wireDrop(zone, onFiles) {
+    zone.addEventListener('dragenter', e => { e.preventDefault(); zone.classList.add('over'); });
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+    zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('over'); });
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('over');
+      const files = [...(e.dataTransfer && e.dataTransfer.files || [])];
+      if (files.length) onFiles(files);
+    });
+  }
+
+  // ---------- wiring ----------
+  if (window.claude && typeof window.claude.use === 'function') {
+    $('viewerNote').hidden = false;
+  }
+  const inViewerNow = !!(window.claude && typeof window.claude.use === 'function');
+  function applyStatic() {
+    const pick = (k, ja) => lang === 'en' && EN[k] != null ? EN[k] : ja;
+    document.querySelectorAll('[data-i]').forEach(e => { e.innerHTML = pick(e.dataset.i, JA[e.dataset.i]); });
+    document.querySelectorAll('[data-ip]').forEach(e => { e.setAttribute('placeholder', pick(e.dataset.ip, JA[e.dataset.ip])); });
+    document.querySelectorAll('[data-ia]').forEach(e => { e.setAttribute('aria-label', pick(e.dataset.ia, JA[e.dataset.ia])); });
+    document.title = lang === 'en' ? 'CIF Completion Tool' : 'CIF補完ツール';
+    document.documentElement.lang = lang;
+    if (inViewerNow) $('dlBtn').textContent = tx('dlViewer');
+    document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  }
+  function setLang(l) {
+    lang = l === 'en' ? 'en' : 'ja';
+    store.set('lang', lang);
+    applyStatic();
+    fillSelect($('gfx'), GFX); fillSelect($('pub'), PUB);
+    renderSoftware('gfx'); renderSoftware('pub');
+    renderTarget(); renderSources(); refreshRun();
+    if (state.lastReport) { renderReport(state.lastReport); renderQuestions(); renderTables(); }
+  }
+  document.querySelectorAll('.lang button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+
+  fillSelect($('gfx'), GFX); fillSelect($('pub'), PUB);
+  for (const kind of ['gfx', 'pub']) {
+    const sel = store.get(kind), ver = store.get(kind + 'Ver'), oth = store.get(kind + 'Other');
+    if (sel != null && [...$(kind).options].some(o => o.value === sel)) $(kind).value = sel;
+    if (ver) $(kind + 'Ver').value = ver;
+    if (oth) $(kind + 'Other').value = oth;
+    [kind, kind + 'Ver', kind + 'Other'].forEach(id => $(id).addEventListener('input', () => {
+      store.set(kind, $(kind).value); store.set(kind + 'Ver', $(kind + 'Ver').value); store.set(kind + 'Other', $(kind + 'Other').value);
+      renderSoftware(kind);
+    }));
+    renderSoftware(kind);
+  }
+
+  $('desc').addEventListener('change', () => { state.userTouched.desc = true; $('descOther').hidden = $('desc').value !== '__other'; });
+  $('descOther').addEventListener('input', () => { state.userTouched.desc = true; });
+  $('colour').addEventListener('input', () => { state.userTouched.colour = true; });
+
+  $('file1').addEventListener('change', e => { if (e.target.files[0]) loadTarget(e.target.files[0]); e.target.value = ''; });
+  $('file2').addEventListener('change', e => { addSources([...e.target.files]); e.target.value = ''; });
+  wireDrop($('drop1'), files => loadTarget(files[0]));
+  wireDrop($('drop2'), files => addSources(files));
+
+  $('runBtn').addEventListener('click', () => {
+    if (state.edited) { $('confirmBar').hidden = false; return; }
+    runComplete();
+  });
+  $('confirmYes').addEventListener('click', () => { $('confirmBar').hidden = true; runComplete(); });
+  $('confirmNo').addEventListener('click', () => { $('confirmBar').hidden = true; });
+
+  let qTimer;
+  $('editor').addEventListener('input', () => {
+    setEdited($('editor').value !== state.baseline);
+    clearTimeout(qTimer); qTimer = setTimeout(() => { renderQuestions(); renderTables(); }, 400);
+  });
+  $('resetBtn').addEventListener('click', () => {
+    $('editor').value = state.baseline; setEdited(false); renderQuestions(); renderTables(); setStatus(tx('resetDone'));
+  });
+  $('dlBtn').addEventListener('click', download);
+  $('docxBtn').addEventListener('click', makeDocx);
+  $('compound').addEventListener('input', () => { state.userTouched.compound = true; });
+  $('copyBtn').addEventListener('click', copyAll);
+
+  setLang(store.get('lang') || (/^ja\b/i.test(navigator.language || '') ? 'ja' : 'en'));
+})();
+</script>
+
+</body>
+</html>
