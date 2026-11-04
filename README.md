@@ -3,7 +3,7 @@
 A single-file, browser-based tool that completes the `?` placeholders of a SHELXL-refined CIF with values from the diffractometer software's output, and builds Word tables for a paper's SI.
 Everything runs in the browser; there is nothing to install.
 
-**Use it:** https://ken1yama.github.io/cif-completer/ (Japanese / English switch at the top right)
+**Use it:** [https://ken1yama.github.io/cif-completer/](https://ken1yama.github.io/cif-completer/) (Japanese / English switch at the top right)
 
 ## What it does
 
@@ -28,7 +28,7 @@ Open `index.html` in a browser. It is a single self-contained file.
 
 SHELXL で精密化した CIF の `?` を、測定ソフトが出力したファイルの値で補完し、論文SI向けの Word の表を作るブラウザ用ツールです。インストール不要で、すべてブラウザ内で動きます。
 
-使う: https://ken1yama.github.io/cif-completer/（右上で日本語 / English を切り替え）
+使う: [https://ken1yama.github.io/cif-completer/](https://ken1yama.github.io/cif-completer/)（右上で日本語 / English を切り替え）
 
 - 値が `?` の項目だけを埋めます。すでに入っている値は変更しません。
 - Rigaku は `.cif_od`、Bruker は `.pcf`（加えて `.p4p`、`.abs` は試験的対応）、他社装置は CIF 形式のファイルを読み込めます。
